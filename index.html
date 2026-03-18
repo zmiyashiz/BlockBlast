@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Block Blast — Go WASM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f0e17;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100dvh;
+      font-family: 'Space Mono', monospace;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #header {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 16px 0;
+      gap: 8px;
+    }
+
+    #header h1 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+    }
+
+    #dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #FF4D6D;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+
+    #canvas-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      flex: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    canvas:active { cursor: grabbing; }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: #0f0e17;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      z-index: 100;
+      transition: opacity 0.4s;
+    }
+
+    #loader.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loader-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.15em;
+    }
+
+    .loader-sub {
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.2em;
+    }
+
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #FF4D6D;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #error-msg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #0f0e17;
+      color: #FF4D6D;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      padding: 40px;
+      line-height: 1.8;
+      z-index: 200;
+    }
+
+    #error-msg h2 { margin-bottom: 16px; font-size: 16px; }
+    #error-msg code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="loader-title">BLOCK BLAST</div>
+  <div class="loader-sub">LOADING WASM...</div>
+</div>
+
+<div id="error-msg">
+  <h2>⚠ Не удалось загрузить игру</h2>
+  <p>Для запуска нужно скомпилировать Go в WebAssembly:</p>
+  <br>
+  <p><code>GOOS=js GOARCH=wasm go build -o game.wasm main.go</code></p>
+  <br>
+  <p>Затем скопируй <code>wasm_exec.js</code> из Go runtime:</p>
+  <br>
+  <p><code>cp $(go env GOROOT)/misc/wasm/wasm_exec.js .</code></p>
+  <br>
+  <p>И запусти локальный сервер (например <code>npx serve .</code> или <code>python3 -m http.server</code>)</p>
+</div>
+
+<div id="header">
+  <div id="dot"></div>
+  <h1>Block Blast</h1>
+</div>
+
+<div id="canvas-wrap">
+  <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+  // Load wasm_exec.js dynamically
+  async function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+
+  async function init() {
+    try {
+      await loadScript('wasm_exec.js');
+    } catch {
+      showError();
+      return;
+    }
+
+    const go = new Go();
+
+    let result;
+    try {
+      result = await WebAssembly.instantiateStreaming(
+        fetch('game.wasm'),
+        go.importObject
+      );
+    } catch (e) {
+      console.error('WASM load error:', e);
+      showError();
+      return;
+    }
+
+    document.getElementById('loader').classList.add('hidden');
+    go.run(result.instance);
+  }
+
+  function showError() {
+    document.getElementById('loader').style.display = 'none';
+    document.getElementById('error-msg').style.display = 'block';
+  }
+
+  init();
+</script>
+
+</body>
+</html>
